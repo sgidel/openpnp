@@ -196,7 +196,23 @@ public class MjpgCaptureCamera extends ReferenceCamera {
                                 inputLine.substring(CONTENT_LENGTH_STRING.length());
                         content_len_string = content_len_string.replaceAll("(\\r|\\n)", "");
                         try {
-                            image_size = Integer.parseInt(content_len_string);
+                            // If there is a mismatch in the FPS between the camera and OpenPnP frames will continue to stack up in the stream buffer
+                            // Since mjpeg framesize is variable, we allow a buffer of 2*current frame size.
+                            // Discard the frame if we are behind by more than 2 frames.
+                            int image_size_read = Integer.parseInt(content_len_string);
+                            if(image_size_read *2 >= mjpgStream.available()) {
+                                image_size = image_size_read;
+                            }
+                            else {
+                                // get to start of frame
+                                while (mjpgStream.read() != 255) {
+                                }
+                                // Skip this frame and continue trying to parse header.
+                                mjpgStream.skip(image_size_read - 1);
+                                // Reset length parser
+                                lineBuilder.flush();
+                                lineBuilder.getBuffer().setLength(0);
+                            }
                         }
                         catch (Exception e) {
                             System.err.println("Invalid image size");
